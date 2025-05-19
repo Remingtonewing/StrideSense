@@ -33,9 +33,7 @@ async def callback(code: str):
         })
 
         token_data = response.json()
-        return {
-            "access_token": token_data.get("access_token"),
-            "refresh_token": token_data.get("refresh_token"),
-            "expires_at": token_data.get("expires_at"),
-            "athlete": token_data.get("athlete")
-        }
+
+        frontend_redirect = f"http://localhost:3000/dashboard?access_token={token_data['access_token']}"
+        return RedirectResponse(frontend_redirect)
+
