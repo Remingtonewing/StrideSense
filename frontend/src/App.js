@@ -54,65 +54,67 @@ function App() {
       maxZoom: 18,
     }).addTo(mapInstance);
 
-    for (let i = 0; i < data.points.length - 1; i++) {
-      const p1 = data.points[i];
-      const p2 = data.points[i + 1];
-      const color = getColor(p1.hr);
-      const time = p1.time;
+    let segmentPoints = [];
+    let currentColor = null;
+    let startIndex = 0;
 
-      const isHRAnomaly =
-        i + 5 < data.points.length &&
-        data.points[i + 5].hr - p1.hr > 10;
+    for (let i = 0; i < data.points.length; i++) {
+      const point = data.points[i];
+      const pointColor = getColor(point.hr);
 
-      const velocity1 = p1.distance ? p1.distance / (p1.time + 1) : 0;
-      const velocity2 = p2.distance ? p2.distance / (p2.time + 1) : 0;
-      const accel = velocity2 - velocity1;
-      const isAccelAnomaly = Math.abs(accel) > 1.5;
+      if (currentColor === null) {
+        currentColor = pointColor;
+        startIndex = i;
+      }
 
-      const isVisible =
-        !filterColor || color === filterColor || (filterColor === "black" && (isHRAnomaly || isAccelAnomaly));
+      const colorMatch = pointColor === currentColor;
+      const endOfSegment = !colorMatch || i === data.points.length - 1;
 
-      if (isVisible) {
-        const segment = L.polyline(
-          [
-            [p1.lat, p1.lng],
-            [p2.lat, p2.lng],
-          ],
-          {
-            color: isHRAnomaly || isAccelAnomaly ? "black" : color,
+      segmentPoints.push([point.lat, point.lng]);
+
+      if (endOfSegment && segmentPoints.length > 1) {
+        if (!filterColor || filterColor === currentColor) {
+          const polyline = L.polyline(segmentPoints, {
+            color: currentColor,
             weight: 5,
             opacity: 0.8,
-          }
-        ).addTo(mapInstance);
+          }).addTo(mapInstance);
 
-        segment.on("click", () => {
-          const avgHR = (p1.hr + p2.hr) / 2;
-          const duration = p2.time - p1.time;
-          const distance =
-            p1.lat !== undefined && p2.lat !== undefined &&
-            p1.lng !== undefined && p2.lng !== undefined
-              ? (L.latLng(p1.lat, p1.lng).distanceTo(L.latLng(p2.lat, p2.lng))).toFixed(2)
-              : "N/A";
-          const speed =
-            distance !== "N/A" && duration > 0
-              ? (parseFloat(distance) / duration).toFixed(2)
-              : "N/A";
+          const segmentData = data.points.slice(startIndex, i + 1);
+          const start = segmentData[0];
+          const end = segmentData[segmentData.length - 1];
+          const avgHR = (
+            segmentData.reduce((sum, p) => sum + (p.hr || 0), 0) / segmentData.length
+          ).toFixed(1);
 
-          L.popup()
-            .setLatLng([p1.lat, p1.lng])
-            .setContent(
-              `<strong>Segment Info</strong><br/>
-              Distance: ${distance}m<br/>
-              Avg HR: ${avgHR} bpm<br/>
-              Duration: ${duration}s<br/>
-              Avg Speed: ${speed} m/s`
-            )
-            .openOn(mapInstance);
-        });
+          const duration = segmentData.reduce((acc, cur, idx, arr) => {
+            if (idx === 0) return 0;
+            return acc + (cur.time - arr[idx - 1].time);
+          }, 0).toFixed(1);
 
-        if (filterColor) {
-          setTimeFrame(`From ${p1.time}s to ${p2.time}s`);
+          const distance = segmentData.reduce((acc, cur, idx, arr) => {
+            if (idx === 0) return 0;
+            return acc + L.latLng(arr[idx - 1].lat, arr[idx - 1].lng).distanceTo(L.latLng(cur.lat, cur.lng));
+          }, 0).toFixed(2);
+
+          const speed = duration > 0 ? (distance / duration).toFixed(2) : "N/A";
+
+          polyline.on("click", () => {
+            L.popup()
+              .setLatLng([start.lat, start.lng])
+              .setContent(
+                `<strong>Segment Info</strong><br/>
+                Distance: ${distance}m<br/>
+                Avg HR: ${avgHR} bpm<br/>
+                Duration: ${duration}s<br/>
+                Avg Speed: ${speed} m/s`
+              )
+              .openOn(mapInstance);
+          });
         }
+        segmentPoints = [[point.lat, point.lng]];
+        currentColor = pointColor;
+        startIndex = i;
       }
     }
   };
