@@ -64,8 +64,8 @@ function App() {
         i + 5 < data.points.length &&
         data.points[i + 5].hr - p1.hr > 10;
 
-      const velocity1 = p1.distance / (p1.time + 1);
-      const velocity2 = p2.distance / (p2.time + 1);
+      const velocity1 = p1.distance ? p1.distance / (p1.time + 1) : 0;
+      const velocity2 = p2.distance ? p2.distance / (p2.time + 1) : 0;
       const accel = velocity2 - velocity1;
       const isAccelAnomaly = Math.abs(accel) > 1.5;
 
@@ -87,9 +87,17 @@ function App() {
 
         segment.on("click", () => {
           const avgHR = (p1.hr + p2.hr) / 2;
-          const distance = (p2.distance - p1.distance).toFixed(2);
           const duration = p2.time - p1.time;
-          const speed = duration > 0 ? (distance / duration).toFixed(2) : "N/A";
+          const distance =
+            p1.lat !== undefined && p2.lat !== undefined &&
+            p1.lng !== undefined && p2.lng !== undefined
+              ? (L.latLng(p1.lat, p1.lng).distanceTo(L.latLng(p2.lat, p2.lng))).toFixed(2)
+              : "N/A";
+          const speed =
+            distance !== "N/A" && duration > 0
+              ? (parseFloat(distance) / duration).toFixed(2)
+              : "N/A";
+
           L.popup()
             .setLatLng([p1.lat, p1.lng])
             .setContent(
