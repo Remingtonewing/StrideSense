@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useEffect, useState } from "react";
 import "./App.css";
 import L from "leaflet";
@@ -11,6 +12,7 @@ function App() {
   const [filterColor, setFilterColor] = useState(null);
   const [timeFrame, setTimeFrame] = useState(null);
   const [lastActivityId, setLastActivityId] = useState(null);
+  const [anomalies, setAnomalies] = useState([]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -31,9 +33,11 @@ function App() {
   }, [filterColor]);
 
   const showHeatmap = async (activityId) => {
+    const detectedAnomalies = [];
     const activity = activities.find((a) => a.id === activityId);
     setSelectedActivity(activity);
     setLastActivityId(activityId);
+    setAnomalies(detectedAnomalies);
 
     const res = await fetch(
       `http://localhost:8000/heatmap/${activityId}?access_token=${accessToken}`
@@ -41,7 +45,7 @@ function App() {
     const data = await res.json();
 
     const mapInstance =
-      map || L.map("map").setView([26.65, -80.25], 15);
+      map || L.map("map").setView([26.65, -75], 15);
     if (!map) setMap(mapInstance);
 
     mapInstance.eachLayer((layer) => {
@@ -49,6 +53,11 @@ function App() {
         mapInstance.removeLayer(layer);
       }
     });
+    if (data.points.length > 0) {
+      const midIndex = Math.floor(data.points.length / 2);
+      const centerPoint = data.points[midIndex];
+      mapInstance.setView([centerPoint.lat, centerPoint.lng], 15.5);
+    }
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
@@ -73,6 +82,28 @@ function App() {
       segmentPoints.push([point.lat, point.lng]);
 
       if (endOfSegment && segmentPoints.length > 1) {
+        // HR spike and acceleration anomaly detection
+        for (let j = startIndex + 1; j <= i; j++) {
+          const prev = data.points[j - 1];
+          const curr = data.points[j];
+          const hrSpike = Math.abs(curr.hr - prev.hr) > 10;
+          const dt = curr.time - prev.time || 1;
+          const prevSpeed = L.latLng(prev.lat, prev.lng).distanceTo(L.latLng(curr.lat, curr.lng)) / dt;
+          const nextSpeed = j + 1 <= i ?
+            L.latLng(curr.lat, curr.lng).distanceTo(L.latLng(data.points[j + 1].lat, data.points[j + 1].lng)) / (data.points[j + 1].time - curr.time || 1) : prevSpeed;
+          const accel = nextSpeed - prevSpeed;
+
+          if (hrSpike || Math.abs(accel) > 1.5) {
+            detectedAnomalies.push({
+              index: j,
+              lat: curr.lat,
+              lng: curr.lng,
+              time: curr.time,
+              hr: curr.hr,
+              type: hrSpike ? 'HR Spike' : 'Acceleration Anomaly'
+            });
+          }
+        }
         if (!filterColor || filterColor === currentColor) {
           const polyline = L.polyline(segmentPoints, {
             color: currentColor,
