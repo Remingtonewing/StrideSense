@@ -16,15 +16,19 @@ function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const token = params.get("access_token");
-    setAccessToken(token);
-
-    if (token) {
-      fetch(`http://localhost:8000/activities?access_token=${token}`)
-        .then((res) => res.json())
-        .then((data) => setActivities(data));
+    const urlToken = params.get("access_token");
+  
+    if (urlToken) {
+      localStorage.setItem("access_token", urlToken);
+      setAccessToken(urlToken);
+    } else {
+      const storedToken = localStorage.getItem("access_token");
+      if (storedToken) {
+        setAccessToken(storedToken);
+      }
     }
   }, []);
+  
 
   useEffect(() => {
     if (lastActivityId) {
