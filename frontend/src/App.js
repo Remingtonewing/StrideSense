@@ -16,19 +16,15 @@ function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get("access_token");
-  
-    if (urlToken) {
-      localStorage.setItem("access_token", urlToken);
-      setAccessToken(urlToken);
-    } else {
-      const storedToken = localStorage.getItem("access_token");
-      if (storedToken) {
-        setAccessToken(storedToken);
-      }
+    const token = params.get("access_token");
+    setAccessToken(token);
+
+    if (token) {
+      fetch(`http://localhost:8000/activities?access_token=${token}`)
+        .then((res) => res.json())
+        .then((data) => setActivities(data));
     }
   }, []);
-  
 
   useEffect(() => {
     if (lastActivityId) {
@@ -86,7 +82,6 @@ function App() {
       segmentPoints.push([point.lat, point.lng]);
 
       if (endOfSegment && segmentPoints.length > 1) {
-        // HR spike and acceleration anomaly detection
         for (let j = startIndex + 1; j <= i; j++) {
           const prev = data.points[j - 1];
           const curr = data.points[j];
@@ -97,7 +92,7 @@ function App() {
             L.latLng(curr.lat, curr.lng).distanceTo(L.latLng(data.points[j + 1].lat, data.points[j + 1].lng)) / (data.points[j + 1].time - curr.time || 1) : prevSpeed;
           const accel = nextSpeed - prevSpeed;
 
-          if (hrSpike || Math.abs(accel) > 1.5) {
+          if (hrSpike || Math.abs(accel) > 5) {
             detectedAnomalies.push({
               index: j,
               lat: curr.lat,
@@ -171,7 +166,7 @@ function App() {
       )}
 
       <div>
-        {activities.map((a) => (
+        {activities.filter((a) => a.map.summary_polyline && a.type === "Run").map((a) => (
           <button key={a.id} onClick={() => showHeatmap(a.id)}>
             {a.name} ({(a.distance / 1000).toFixed(2)} km)
           </button>
@@ -180,42 +175,84 @@ function App() {
 
       <div style={{ marginTop: "15px" }}>
         <span>Filter by HR zone: </span>
-        {['green', 'yellow', 'orange', 'red', 'black'].map(c => (
+        {["green", "yellow", "orange", "red", "black"].map((c) => (
           <button
             key={c}
             onClick={() => setFilterColor(filterColor === c ? null : c)}
             style={{ backgroundColor: c, color: "white", margin: "0 5px" }}
           >
-            {filterColor === c ? "✓ " : ""}{c.toUpperCase()}
+            {filterColor === c ? "✓ " : ""}
+            {c.toUpperCase()}
           </button>
         ))}
       </div>
 
-      {timeFrame && (
-        <p style={{ marginTop: "10px" }}><strong>Time Frame:</strong> {timeFrame}</p>
-      )}
+      <div style={{ display: "flex", justifyContent: "center", marginTop: "20px" }}>
+        {anomalies.length > 0 && (
+          <div
+            style={{
+              flex: "0 0 300px",
+              marginRight: "20px",
+              padding: "15px",
+              backgroundColor: "#f9f9f9",
+              borderRadius: "8px",
+              boxShadow: "0 2px 5px rgba(0, 0, 0, 0.1)",
+            }}
+          >
+            <h3>Acceleration Anomalies</h3>
+            <ul style={{ listStyleType: "none", paddingLeft: 0 }}>
+              {anomalies
+                .filter((anomaly) => anomaly.type === "Acceleration Anomaly")
+                .map((anomaly, idx) => (
+                  <li key={idx} style={{ marginBottom: "10px" }}>
+                    <strong>Time:</strong> {anomaly.time}s<br />
+                    <strong>HR:</strong> {anomaly.hr} bpm<br />
+                    <strong>Lat:</strong> {anomaly.lat.toFixed(5)}<br />
+                    <strong>Lng:</strong> {anomaly.lng.toFixed(5)}
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
 
-      {selectedActivity && (
-        <div
-          style={{
-            textAlign: "left",
-            margin: "20px auto",
-            maxWidth: "600px",
-            backgroundColor: "#f9f9f9",
-            padding: "15px",
-            borderRadius: "8px",
-            boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
-          }}
-        >
-          <h2>Run Summary</h2>
-          <p><strong>{selectedActivity.name}</strong></p>
-          <p><strong>Date:</strong> {new Date(selectedActivity.start_date_local).toLocaleString()}</p>
-          <p><strong>Distance:</strong> {(selectedActivity.distance / 1000).toFixed(2)} km</p>
-          <p><strong>Avg Heart Rate:</strong> {selectedActivity.average_heartrate} bpm</p>
-          <p><strong>Max Speed:</strong> {selectedActivity.max_speed.toFixed(2)} m/s</p>
-          <p><strong>Suffer Score:</strong> {selectedActivity.suffer_score}</p>
-        </div>
-      )}
+        {selectedActivity && (
+          <div
+            style={{
+              textAlign: "left",
+              maxWidth: "600px",
+              backgroundColor: "#f9f9f9",
+              padding: "15px",
+              borderRadius: "8px",
+              boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+              flex: 1,
+            }}
+          >
+            <h2>Run Summary</h2>
+            <p>
+              <strong>{selectedActivity.name}</strong>
+            </p>
+            <p>
+              <strong>Date:</strong>{" "}
+              {new Date(selectedActivity.start_date_local).toLocaleString()}
+            </p>
+            <p>
+              <strong>Distance:</strong>{" "}
+              {(selectedActivity.distance / 1000).toFixed(2)} km
+            </p>
+            <p>
+              <strong>Avg Heart Rate:</strong>{" "}
+              {selectedActivity.average_heartrate} bpm
+            </p>
+            <p>
+              <strong>Max Speed:</strong>{" "}
+              {selectedActivity.max_speed.toFixed(2)} m/s
+            </p>
+            <p>
+              <strong>Suffer Score:</strong> {selectedActivity.suffer_score}
+            </p>
+          </div>
+        )}
+      </div>
 
       <div id="map" style={{ height: "500px", marginTop: "20px" }}></div>
     </div>

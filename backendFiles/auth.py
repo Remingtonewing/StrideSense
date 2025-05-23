@@ -36,4 +36,5 @@ async def callback(code: str):
     token_data = response.json()
     access_token = token_data.get("access_token")
 
+
     return RedirectResponse(f"http://localhost:3000?access_token={access_token}")
